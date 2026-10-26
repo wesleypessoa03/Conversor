@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prints e PDFs para Excel</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f4f6f5;--card:#fff;--ink:#17231d;--mut:#5d6b64;--line:#d9e0dc;--ac:#1d6f42;--acx:#e3f1e9;--warn:#fff3c4;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#121816;--card:#1a221f;--ink:#e6efe9;--mut:#93a39a;--line:#2d3a35;--ac:#4cc287;--acx:#1d3328;--warn:#4a4118;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,"Segoe UI",Roboto,sans-serif}
+header{padding:22px 28px 6px}h1{margin:0;font-size:24px;letter-spacing:-.01em}header p{margin:4px 0 0;color:var(--mut)}
+main{padding:12px 28px 40px;display:grid;gap:14px;max-width:1500px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+#drop{border:2px dashed var(--line);border-radius:10px;padding:30px 20px;text-align:center;background:var(--card);cursor:pointer;transition:.15s}
+#drop.on,#drop:focus-visible{border-color:var(--ac);background:var(--acx);outline:none}
+#drop b{font-size:17px}#drop span{color:var(--mut);display:block;margin-top:4px}
+button,select{font:inherit;color:inherit}
+.btn{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 12px;cursor:pointer}
+.btn:hover{border-color:var(--ac)}.btn:focus-visible,.tab:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.btn.p{background:var(--ac);color:#fff;border-color:var(--ac)}@media(prefers-color-scheme:dark){.btn.p{color:#0b1a12}}
+details summary{cursor:pointer;font-weight:600}
+.set{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px 22px;margin-top:12px}
+.set label{display:grid;gap:3px;font-size:13px;color:var(--mut)}.set label.ck{display:flex;gap:8px;align-items:center;color:var(--ink)}
+.set select,.set input[type=range]{width:100%}.set select{padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--card)}
+#status{color:var(--mut);display:flex;gap:12px;align-items:center;min-height:22px}
+#bar{height:4px;background:var(--line);border-radius:2px;flex:1;max-width:260px;overflow:hidden}#bar i{display:block;height:100%;width:0;background:var(--ac);transition:width .2s}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tab{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:4px 10px;cursor:pointer;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab.on{background:var(--ac);border-color:var(--ac);color:#fff}@media(prefers-color-scheme:dark){.tab.on{color:#0b1a12}}
+.tool{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.tool .info{margin-left:auto;color:var(--mut);font-size:13px}
+.grid{display:grid;grid-template-columns:minmax(260px,36%) 1fr;gap:14px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+#left{position:sticky;top:8px}#left canvas{width:100%;border:1px solid var(--line);border-radius:6px;background:#fff;display:block}
+#left small{color:var(--mut);display:block;margin-top:6px}#ov{cursor:crosshair}
+#tw{overflow:auto;max-height:74vh;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;width:max-content;min-width:100%}
+th,td{border:1px solid var(--line);padding:3px 8px;white-space:pre-wrap;vertical-align:top}
+thead th,tbody th{background:var(--acx);font-weight:600;font-size:12px;color:var(--mut);position:sticky;top:0;text-align:center}
+tbody th{left:0;top:auto;z-index:1}thead th:first-child{left:0;z-index:2}
+th button{border:0;background:none;color:var(--mut);cursor:pointer;padding:0 3px;opacity:.55}th button:hover{opacity:1;color:var(--ac)}
+td{min-width:56px}td:focus{outline:2px solid var(--ac);outline-offset:-2px}td.lc{background:var(--warn)}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:.2s}#toast.on{opacity:1}
+.err{background:var(--warn);padding:10px 14px;border-radius:8px}
+</style>
+</head>
+<body>
+<header><h1>Prints e PDFs para Excel</h1><p>Tudo roda no seu navegador: nenhum arquivo sai do seu computador.</p></header>
+<main>
+<div id="libs"></div>
+<div id="drop" tabindex="0" role="button" aria-label="Escolher arquivos">
+  <b>Arraste prints e PDFs para cá</b>
+  <span>ou cole um print com Ctrl+V · ou clique para escolher arquivos</span>
+  <input type="file" id="file" multiple accept="image/*,.pdf,application/pdf" hidden>
+</div>
+<details class="card" id="cfg">
+  <summary>Ajustes de leitura</summary>
+  <div class="set">
+    <label>Idioma do texto
+      <select id="lang"><option value="por+eng">Português + Inglês</option><option value="eng">Inglês</option><option value="spa+eng">Espanhol + Inglês</option></select></label>
+    <label>PDFs
+      <select id="pdfMode"><option value="auto">Automático (texto se existir, senão OCR)</option><option value="ocr">Sempre OCR (escaneado)</option><option value="text">Só texto do PDF</option></select></label>
+    <label>Formato dos números
+      <select id="nfmt"><option value="br">Brasil (1.234,56)</option><option value="us">EUA (1,234.56)</option></select></label>
+    <label>Sensibilidade das colunas: <span id="sv">normal</span>
+      <input type="range" id="sens" min="0.5" max="2" step="0.05" value="1"></label>
+    <label class="ck"><input type="checkbox" id="grid" checked> Usar linhas da tabela (bordas) quando existirem</label>
+    <label class="ck"><input type="checkbox" id="wrap"> Juntar linhas quebradas (célula com texto em 2 linhas)</label>
+    <label class="ck"><input type="checkbox" id="conv" checked> Corrigir e converter números e datas no Excel</label>
+    <label class="ck"><input type="checkbox" id="deskew" checked> Endireitar imagens tortas</label>
+  </div>
+  <p style="margin:12px 0 0;font-size:13px;color:var(--mut)">Colunas, linhas e conversão de números atualizam na hora. Idioma, PDF e endireitar só valem depois de <button class="btn" id="redo">Ler de novo</button></p>
+</details>
+<div id="status"></div>
+<section id="res" class="card" hidden>
+  <div class="tabs" id="tabs"></div>
+  <div class="tool">
+    <button class="btn p" id="bcopy">Copiar tabela</button>
+    <button class="btn" id="bx">Baixar Excel (.xlsx)</button>
+    <button class="btn" id="bxa">Excel com todas as abas</button>
+    <button class="btn" id="bcsv">Baixar CSV</button>
+    <button class="btn" id="bdel" title="Remove só a aba atual">Excluir esta aba</button>
+    <button class="btn" id="bnew" title="Apaga tudo para começar outra tabela">Nova tabela</button>
+    <span class="info" id="info"></span>
+  </div>
+  <div class="grid">
+    <div id="left"><canvas id="ov"></canvas><div style="margin:8px 0 4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="clk" class="btn"><option value="c">Clicar: colunas</option><option value="r">Clicar: linhas</option></select><button class="btn" id="auto">Voltar ao automático</button></div><small>Corrija direto na imagem. Modo <b>colunas</b>: clique para criar uma linha vermelha, ou numa existente para removê-la. Modo <b>linhas</b>: clique numa tracejada azul para unir as duas linhas, ou dentro de uma linha para separá-la. <label><input type="checkbox" id="showw"> mostrar palavras</label></small></div>
+    <div><div id="tw"></div><small style="color:var(--mut)">Clique em uma célula para corrigir. Células amarelas têm leitura incerta. Use ⇥ para unir uma coluna com a seguinte e ✕ para apagar.</small></div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const S={items:[],cur:0,worker:null,wl:'',busy:false,stop:false,pdfOk:false};
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const med=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[s.length>>1]:0;};
+const opt=()=>({lang:$('#lang').value,pdf:$('#pdfMode').value,nfmt:$('#nfmt').value,sens:+$('#sens').value,grid:$('#grid').checked,wrap:$('#wrap').checked,conv:$('#conv').checked,deskew:$('#deskew').checked});
+const colL=n=>{let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=((n-m-1)/26)|0;}return s;};
+const mkc=(w,h)=>{const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w));c.height=Math.max(1,Math.round(h));return c;};
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1800);}
+function msg(m,p){$('#status').innerHTML=m?`<span>${esc(m)}</span>`+(p!=null?`<div id="bar"><i style="width:${p}%"></i></div>`:'')+(S.busy?'<button class="btn" id="stop">Parar</button>':''):'';const b=$('#stop');if(b)b.onclick=()=>{S.stop=true;};}
+
+/* ---------- Imagem: carregar, tratar, achar linhas ---------- */
+async function loadImg(f){
+  const b=await createImageBitmap(f,{imageOrientation:'from-image'}).catch(()=>createImageBitmap(f));
+  let k=b.width<2000?Math.min(3,2000/b.width):1;const mx=Math.max(b.width,b.height)*k;if(mx>5000)k*=5000/mx;
+  const c=mkc(b.width*k,b.height*k),x=c.getContext('2d');x.imageSmoothingQuality='high';x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(b,0,0,c.width,c.height);return c;
+}
+function toGray(c){const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data,g=new Uint8Array(c.width*c.height);for(let i=0,j=0;i<g.length;i++,j+=4)g[i]=(d[j]*77+d[j+1]*150+d[j+2]*29)>>8;return g;}
+function grayToC(g,W,H){const c=mkc(W,H),x=c.getContext('2d'),im=x.createImageData(W,H);for(let i=0,j=0;i<g.length;i++,j+=4){im.data[j]=im.data[j+1]=im.data[j+2]=g[i];im.data[j+3]=255;}x.putImageData(im,0,0);return c;}
+function bgOf(g){const h=new Uint32Array(256);for(let i=0;i<g.length;i+=5)h[g[i]]++;let b=0;for(let i=1;i<256;i++)if(h[i]>h[b])b=i;return b;}
+function skew(g,W,H,bg){ // inclinação por projeção horizontal
+  const k=Math.max(1,Math.round(W/700)),p=[];
+  for(let y=0;y<H;y+=k)for(let x=0;x<W;x+=k)if(g[y*W+x]<bg-70)p.push(x/k,y/k);
+  const n=p.length/2;if(n<50)return 0;const off=Math.ceil(H/k+W/k)+10;let best=0,bs=-1;
+  for(let a=-5;a<=5;a+=.25){const s=Math.sin(a*Math.PI/180),co=Math.cos(a*Math.PI/180),bins=new Float32Array(off*2+W);
+    for(let i=0;i<n;i++)bins[Math.round(p[2*i+1]*co-p[2*i]*s)+off]++;
+    let sc=0;for(let i=0;i<bins.length;i++)sc+=bins[i]*bins[i];if(sc>bs){bs=sc;best=a;}}
+  return best;
+}
+function findLines(g,W,H,bg){ // linhas longas e finas = bordas da tabela
+  const T=bg-26,minV=Math.max(100,H*.035),minH=Math.max(100,W*.035);
+  const scan=(N,L,ix,min)=>{const hit=[];
+    for(let i=0;i<N;i++){let s=-1,e=-1,gp=0,bl=0,bs=0,be=0;
+      for(let j=0;j<L;j++){if(g[ix(i,j)]<T){if(s<0){s=j;}e=j;gp=0;}else if(s>=0&&++gp>2){if(e-s>bl){bl=e-s;bs=s;be=e;}s=-1;}}
+      if(s>=0&&e-s>bl){bl=e-s;bs=s;be=e;}
+      if(bl>=min)hit.push({i,s:bs,e:be});}
+    const out=[];let c=null;
+    for(const h of hit){if(c&&h.i-c.l<=1){c.l=h.i;c.s=Math.min(c.s,h.s);c.e=Math.max(c.e,h.e);}else{if(c)out.push(c);c={f:h.i,l:h.i,s:h.s,e:h.e};}}
+    if(c)out.push(c);
+    return out.filter(b=>b.l-b.f<12).map(b=>({p:(b.f+b.l)/2,f:b.f,l:b.l,s:b.s,e:b.e}));};
+  return{h:scan(H,W,(i,j)=>i*W+j,minH),v:scan(W,H,(i,j)=>j*W+i,minV)};
+}
+function prep(c,o,ocr){
+  let W=c.width,H=c.height,g=toGray(c),bg=bgOf(g);
+  if(bg<110){for(let i=0;i<g.length;i++)g[i]=255-g[i];bg=255-bg;} // tema escuro
+  if(ocr&&o.deskew){const a=skew(g,W,H,bg);if(Math.abs(a)>.3){const r=grayToC(g,W,H),d=mkc(W,H),x=d.getContext('2d');x.fillStyle=`rgb(${bg},${bg},${bg})`;x.fillRect(0,0,W,H);x.translate(W/2,H/2);x.rotate(-a*Math.PI/180);x.drawImage(r,-W/2,-H/2);g=toGray(d);}}
+  const lines=findLines(g,W,H,bg),h=new Uint32Array(256);
+  for(let i=0;i<g.length;i+=3)h[g[i]]++;
+  const tot=Math.ceil(g.length/3);let a=0,lo=0,hi=255;
+  for(let i=0;i<256;i++){a+=h[i];if(a>=tot*.01){lo=i;break;}}a=0;
+  for(let i=0;i<256;i++){a+=h[i];if(a>=tot*.97){hi=i;break;}}
+  if(hi-lo<40){lo=Math.max(0,hi-40);}
+  const n=new Uint8Array(g.length),m=255/(hi-lo);
+  for(let i=0;i<g.length;i++){const v=(g[i]-lo)*m;n[i]=v<0?0:v>255?255:v;}
+  let q=n;
+  if(ocr){ // normaliza o fundo localmente (listras, cabeçalhos coloridos, texto claro em fundo escuro)
+    const mean=boxMean(g,W,H,Math.max(12,Math.min(55,Math.round(Math.min(W,H)/45))));q=new Uint8Array(g.length);
+    for(let i=0;i<g.length;i++){const mu=mean[i],v=g[i];let s=0;
+      if(mu-v>14)s=Math.min(1,(mu-v)/(.55*Math.max(mu,70)));
+      else if(mu<125&&v-mu>14)s=Math.min(1,(v-mu)/(.5*(255-mu)));
+      q[i]=255-255*s;}
+    for(const a of [n,q]){ // apaga as bordas para o OCR não confundir com letras
+      for(const l of lines.h)for(let y=Math.max(0,l.f-1);y<=Math.min(H-1,l.l+1);y++)a.fill(255,y*W+l.s,y*W+l.e+1);
+      for(const l of lines.v)for(let y=l.s;y<=l.e;y++)for(let x=Math.max(0,l.f-1);x<=Math.min(W-1,l.l+1);x++)a[y*W+x]=255;}}
+  return{canvas:grayToC(q,W,H),view:grayToC(n,W,H),lines,W,H};
+}
+function boxMean(g,W,H,r){ // média local rápida (janela quadrada)
+  const k=2*r+1,tmp=new Uint16Array(W*H),out=new Uint8Array(W*H),col=new Int32Array(W);
+  for(let y=0;y<H;y++){const o=y*W;let s=0;
+    for(let x=-r;x<=r;x++)s+=g[o+Math.min(W-1,Math.max(0,x))];
+    for(let x=0;x<W;x++){tmp[o+x]=s;s+=g[o+Math.min(W-1,x+r+1)]-g[o+Math.max(0,x-r)];}}
+  for(let y=-r;y<=r;y++){const o=Math.min(H-1,Math.max(0,y))*W;for(let x=0;x<W;x++)col[x]+=tmp[o+x];}
+  const kk=k*k;
+  for(let y=0;y<H;y++){const o=y*W;for(let x=0;x<W;x++)out[o+x]=col[x]/kk;
+    const a=Math.min(H-1,y+r+1)*W,b=Math.max(0,y-r)*W;for(let x=0;x<W;x++)col[x]+=tmp[a+x]-tmp[b+x];}
+  return out;
+}
+function thumb(c){const k=Math.min(1,1000/c.width),t=mkc(c.width*k,c.height*k);t.getContext('2d').drawImage(c,0,0,t.width,t.height);return t;}
+
+/* ---------- PDF ---------- */
+async function initPdf(){if(S.pdfOk)return;const t=await (await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js')).text();pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([t],{type:'text/javascript'}));S.pdfOk=true;}
+function pdfWords(tc,vp){
+  const out=[];
+  for(const it of tc.items){const s=it.str;if(!s||!s.trim())continue;
+    const t=pdfjsLib.Util.transform(vp.transform,it.transform),fh=Math.hypot(t[2],t[3]),x0=t[4],yb=t[5],w=it.width*vp.scale,n=s.length,re=/\S+/g;let m;
+    while((m=re.exec(s)))out.push({text:m[0],x0:x0+w*m.index/n,x1:x0+w*(m.index+m[0].length)/n,y0:yb-fh*.75,y1:yb+fh*.1,conf:100});}
+  return out;
+}
+
+/* ---------- OCR ---------- */
+async function getWorker(lang){
+  if(S.worker&&S.wl===lang)return S.worker;
+  if(S.worker){await S.worker.terminate();S.worker=null;}
+  const mk=p=>Tesseract.createWorker(lang,1,Object.assign({logger:m=>{if(m.status==='recognizing text')msg('Lendo o texto da imagem… '+Math.round(m.progress*100)+'%',m.progress*100);else if(/loading/.test(m.status))msg('Baixando modelo de idioma (só na primeira vez)…',m.progress*100);}},p));
+  let w;try{w=await mk({langPath:'https://tessdata.projectnaptha.com/4.0.0_best'});}catch(e){w=await mk({});}
+  await w.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1',user_defined_dpi:'300'});
+  S.worker=w;S.wl=lang;return w;
+}
+
+/* ---------- Reconstrução da tabela ---------- */
+const junk=w=>{const t=w.text.trim();return !t||/^[|¦_\[\]{}\\~`´^=]+$/.test(t)||(/^[-—–.:,;'"‘’“”]+$/.test(t)&&w.conf<40)||(w.conf<8&&t.length<3);};
+const fixNum=t=>{
+  if(!(/^[\dOolI|.,\-+%()R$\s\/:]+$/.test(t)&&/\d/.test(t)))return t;
+  let r=t.replace(/[Oo]/g,'0').replace(/[lI|]/g,'1');
+  if(!/[\/:]/.test(r))r=r.replace(/(\d)\s+([.,])\s*(?=\d)/g,'$1$2').replace(/(\d[.,])\s+(?=\d)/g,'$1');
+  return r;
+};
+function autoThr(g,h){ // separa "espaço entre palavras" de "espaço entre colunas"
+  const v=g.map(x=>Math.log(Math.max(x,h*.05))).sort((a,b)=>a-b),n=v.length;if(n<6)return h*1.3;
+  const pre=[0];v.forEach((x,i)=>pre[i+1]=pre[i]+x);let best=-1,bi=0;
+  for(let i=2;i<n-1;i++){const m1=pre[i]/i,m2=(pre[n]-pre[i])/(n-i),s=i*(n-i)*(m1-m2)**2;if(s>best){best=s;bi=i;}}
+  const m1=pre[bi]/bi,m2=(pre[n]-pre[bi])/(n-bi);
+  if(m2-m1<Math.log(2.2)||(n-bi)<Math.max(3,n*.04))return h*1.3;
+  return Math.exp((v[bi-1]+v[bi])/2);
+}
+function build(p,o){
+  p.cols=[];p.rowSep=[];p.rows=[];
+  const ws=p.words.filter(w=>!junk(w)).map(w=>({...w,cx:(w.x0+w.x1)/2,cy:(w.y0+w.y1)/2}));
+  if(!ws.length)return;
+  const h=med(ws.map(w=>w.y1-w.y0));
+  ws.sort((a,b)=>a.cy-b.cy);
+  const L=[];
+  for(const w of ws){const l=L[L.length-1];if(l&&Math.abs(w.cy-l.cy)<=h*.55){l.w.push(w);l.cy+=(w.cy-l.cy)/l.w.length;}else L.push({w:[w],cy:w.cy});}
+  L.forEach(l=>{l.w.sort((a,b)=>a.x0-b.x0);l.y0=Math.min(...l.w.map(w=>w.y0));l.y1=Math.max(...l.w.map(w=>w.y1));});
+  const gaps=[];L.forEach(l=>{for(let i=1;i<l.w.length;i++)gaps.push(Math.max(l.w[i].x0-l.w[i-1].x1,0));});
+  const thr=Math.min(Math.max(autoThr(gaps,h)/o.sens,h*.6),h*3);
+  const nseg=l=>1+l.w.slice(1).filter((w,i)=>w.x0-l.w[i].x1>=thr).length;
+  let M=L.filter(l=>nseg(l)>=2);if(M.length<2)M=L;
+  // colunas: linhas verticais da imagem, ou vãos brancos alinhados em todas as linhas
+  let vl=o.grid?(p.lines.v||[]).filter(v=>ws.some(w=>w.cx<v.p)&&ws.some(w=>w.cx>v.p)).map(v=>v.p).sort((a,b)=>a-b):[];
+  vl=vl.filter((x,i)=>!i||x-vl[i-1]>h*.5);
+  let bounds=[];
+  if(vl.length>=2)bounds=vl;
+  else{
+    const minX=Math.floor(Math.min(...ws.map(w=>w.x0))),N=Math.ceil(Math.max(...ws.map(w=>w.x1)))-minX,cov=new Int32Array(N+2);
+    for(const l of M)for(const w of l.w)for(let x=Math.floor(w.x0)-minX;x<Math.ceil(w.x1)-minX;x++)cov[x]++;
+    cov[N+1]=1e9;const tol=Math.floor(M.length*.04);let st=-1;
+    for(let x=0;x<=N+1;x++){if(cov[x]<=tol){if(st<0)st=x;}else if(st>=0){if(st>0&&x<=N&&x-st>=thr)bounds.push(minX+(st+x)/2);st=-1;}}
+    if(vl.length===1){bounds.push(vl[0]);bounds.sort((a,b)=>a-b);bounds=bounds.filter((x,i)=>!i||x-bounds[i-1]>h*.7);}
+  }
+  if(p.mc)bounds=p.mc.slice().sort((a,b)=>a-b); // colunas ajustadas à mão
+  const col=w=>{let c=0;for(const b of bounds)if(w.cx>b)c++;return c;};
+  // linhas: bordas horizontais agrupam linhas de texto de uma mesma célula
+  const hl=o.grid?(p.lines.h||[]).filter(v=>ws.some(w=>w.cy<v.p)&&ws.some(w=>w.cy>v.p)).map(v=>v.p).sort((a,b)=>a-b):[];
+  const band=y=>{let c=0;for(const b of hl)if(y>b)c++;return c;},cnt={};
+  if(hl.length>=2)L.forEach(l=>{const b=band(l.cy);cnt[b]=(cnt[b]||0)+1;});
+  const R=[];let lb=null,pl=null;
+  for(const l of L){const b=hl.length>=2?band(l.cy):null;let join=b!==null&&cnt[b]<=6&&R.length>0&&lb===b;
+    if(pl&&p.my){const ev=p.my.filter(e=>e.y>pl.cy&&e.y<l.cy);if(ev.length)join=ev[ev.length-1].t==='j';} // união/separação manual
+    if(join)R[R.length-1].push(l);else R.push([l]);lb=b;pl=l;}
+  const nc=bounds.length+1;
+  let rows=R.map(gr=>{
+    const row=Array.from({length:nc},()=>({t:'',lc:0}));
+    for(const l of gr){
+      let grp=[],cur=[l.w[0]];
+      if(nseg(l)<2)cur=l.w;
+      else for(let i=1;i<l.w.length;i++){const w=l.w[i],pv=l.w[i-1],gp=w.x0-pv.x1;
+        if(gp>=thr||(col(w)!==col(pv)&&gp>=thr*.5)){grp.push(cur);cur=[w];}else cur.push(w);}
+      grp.push(cur);
+      for(const g of grp){const c=row[col(g[0])],t=g.map(w=>w.text).join(' ');c.t=c.t?c.t+' '+t:t;c.lc=c.lc||g.some(w=>w.conf<60&&/[\p{L}\d]/u.test(w.text))?1:0;}
+    }
+    return row;});
+  if(o.wrap){const out=[];for(const r of rows){const ne=r.filter(c=>c.t).length;
+    if(out.length&&!r[0].t&&ne>0&&ne<=Math.ceil(nc/2)){r.forEach((c,i)=>{if(c.t){const t=out[out.length-1][i];t.t=t.t?t.t+' '+c.t:c.t;t.lc=t.lc||c.lc;}});}else out.push(r);}rows=out;}
+  if(!p.mc){ // limpeza de colunas “sobra”: símbolos soltos (R$, %) e colunas quase vazias
+    const mv=(c,d)=>rows.forEach(r=>{const x=r[c];if(!x.t)return;const y=r[d];y.t=d>c?(x.t+' '+y.t).trim():(y.t+' '+x.t).trim();y.lc=y.lc||x.lc;x.t='';x.lc=0;});
+    for(let c=0;c<nc;c++){const f=rows.filter(r=>r[c].t);if(!f.length)continue;
+      if(c<nc-1&&f.every(r=>/^(R\$|US\$|\$|€|£)$/.test(r[c].t.trim())))mv(c,c+1);
+      else if(c>0&&f.every(r=>/^%$/.test(r[c].t.trim())))mv(c,c-1);
+      else if(rows.length>=8&&f.length<=1&&nc>1){const r=f[0],d=c>0&&!r[c-1].t?c-1:c<nc-1&&!r[c+1].t?c+1:-1;if(d>=0)mv(c,d);}}}
+  const keep=[];for(let i=0;i<nc;i++)if(rows.some(r=>r[i].t))keep.push(i);
+  rows=rows.map(r=>keep.map(i=>r[i])).filter(r=>r.some(c=>c.t));
+  if(o.conv)rows.forEach(r=>r.forEach(c=>{c.t=fixNum(c.t.trim());}));
+  p.rows=rows;p.cols=bounds;
+  for(let k=1;k<R.length;k++)p.rowSep.push((Math.max(...R[k-1].map(l=>l.y1))+Math.min(...R[k].map(l=>l.y0)))/2);
+}
+
+/* ---------- Números e datas para o Excel ---------- */
+function typed(t,o){
+  const s=t.trim();if(!s)return null;
+  let m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})$/);
+  if(m){let d=+m[1],mo=+m[2],y=+m[3];if(y<100)y+=y<70?2000:1900;const dt=new Date(Date.UTC(y,mo-1,d));
+    return dt.getUTCMonth()===mo-1&&dt.getUTCDate()===d?{v:(dt-Date.UTC(1899,11,30))/864e5,z:'dd/mm/yyyy'}:null;}
+  let x=s,neg=false,pct=false,cur=false;
+  if(/^\(.*\)$/.test(x)){neg=true;x=x.slice(1,-1).trim();}
+  if(x[0]==='-'){neg=true;x=x.slice(1).trim();}
+  if(/^(R\$|US\$|\$|€|£)/i.test(x)){cur=true;x=x.replace(/^(R\$|US\$|\$|€|£)\s*/i,'');}
+  if(x[0]==='-'){neg=true;x=x.slice(1).trim();}
+  if(/-$/.test(x)){neg=true;x=x.slice(0,-1).trim();}
+  if(/%$/.test(x)){pct=true;x=x.slice(0,-1).trim();}
+  x=x.replace(/(?<=\d) (?=\d{3}\b)/g,'');
+  const [dec,th]=o.nfmt==='br'?[',','.']:['.',','];
+  const re=new RegExp('^\\d{1,3}(\\'+th+'\\d{3})+(\\'+dec+'\\d+)?$|^\\d+(\\'+dec+'\\d+)?$');
+  if(!re.test(x))return null;
+  if(/^0\d/.test(x)&&!x.includes(dec)&&!x.includes(th))return null;
+  if(/^\d{13,}$/.test(x))return null;
+  let v=parseFloat(x.split(th).join('').replace(dec,'.'));if(isNaN(v))return null;
+  const d=x.includes(dec)?x.split(dec)[1].length:0;
+  if(neg)v=-v;if(pct)v/=100;
+  const z=pct?'0'+(d?'.'+'0'.repeat(d):'')+'%':(cur?'"R$" ':'')+(x.includes(th)?'#,##0':'0')+(d?'.'+'0'.repeat(d):'');
+  return{v,z};
+}
+function sheetOf(rows,o){
+  const ws={},C=Math.max(0,...rows.map(r=>r.length)),wd=Array(C).fill(8);
+  rows.forEach((r,i)=>r.forEach((c,j)=>{const t=c.t;if(t==='')return;let cell={t:'s',v:t};
+    if(o.conv){const ty=typed(t,o);if(ty)cell={t:'n',v:ty.v,z:ty.z};}
+    ws[XLSX.utils.encode_cell({r:i,c:j})]=cell;wd[j]=Math.min(60,Math.max(wd[j],t.length+2));}));
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(rows.length-1,0),c:Math.max(C-1,0)}});
+  ws['!cols']=wd.map(w=>({wch:w}));return ws;
+}
+
+/* ---------- Processamento ---------- */
+async function proc(it){
+  const o=opt();it.st='lendo';it.mc=null;it.my=null;render();
+  try{
+    msg('Preparando '+it.name+'…');
+    let c,words,via='ocr';
+    if(it.kind==='pdf'){
+      const pg=await it.pdf.getPage(it.n),v1=pg.getViewport({scale:1}),vp=pg.getViewport({scale:Math.min(5,Math.max(1.5,2400/v1.width))});
+      c=mkc(vp.width,vp.height);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+      await pg.render({canvasContext:x,viewport:vp}).promise;
+      if(o.pdf!=='ocr'){const tw=pdfWords(await pg.getTextContent(),vp);if(o.pdf==='text'||(tw.length>=6&&tw.reduce((a,w)=>a+w.text.length,0)>=25)){words=tw;via='texto do PDF';}}
+    }else c=await loadImg(it.file);
+    const pr=prep(c,o,via==='ocr');
+    if(via==='ocr'){const w=await getWorker(o.lang);msg('Lendo o texto da imagem…',0);const {data}=await w.recognize(pr.canvas);
+      words=data.words.map(x=>({text:x.text,x0:x.bbox.x0,y0:x.bbox.y0,x1:x.bbox.x1,y1:x.bbox.y1,conf:x.confidence}));}
+    Object.assign(it,{words,lines:pr.lines,W:pr.W,H:pr.H,via:via==='ocr'?'OCR':via,thumb:thumb(pr.view),st:'ok'});
+    build(it,o);
+  }catch(e){console.error(e);it.st='erro';it.err=e.message||String(e);}
+  render();
+}
+async function run(){
+  if(S.busy)return;S.busy=true;S.stop=false;
+  let n=0;
+  for(;;){const it=S.items.find(i=>i.st==='fila');if(!it||S.stop)break;
+    await proc(it);n++;const left=S.items.filter(i=>i.st==='fila').length;msg(left?`Concluído ${n}, faltam ${left}…`:'',left?n/(n+left)*100:null);}
+  S.busy=false;S.items.forEach(i=>{if(i.st==='lendo')i.st='fila';});msg(S.stop?'Interrompido.':'');render();
+}
+async function addFiles(files){
+  const first=S.items.length;
+  for(const f of files){
+    try{
+      if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)){await initPdf();const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+        for(let n=1;n<=pdf.numPages;n++)S.items.push({name:pdf.numPages>1?`${f.name} · pág. ${n}`:f.name,kind:'pdf',pdf,n,st:'fila'});}
+      else if(/^image\//.test(f.type))S.items.push({name:f.name||'print',kind:'img',file:f,st:'fila'});
+    }catch(e){console.error(e);toast('Não consegui abrir '+f.name);}
+  }
+  if(S.items.length>first){if(S.cur<0||S.cur>=first)S.cur=first;S.stop=false;render();run();}
+}
+
+/* ---------- Interface ---------- */
+const ico={fila:'⏳',lendo:'⌛',ok:'',erro:'⚠'};
+function mergedRows(){
+  const done=S.items.filter(i=>i.st==='ok'),out=[];let first='';
+  done.forEach((it,k)=>it.rows.forEach((r,i)=>{const key=r.map(c=>c.t.toLowerCase()).join('|');if(k===0&&i===0)first=key;if(k>0&&key===first)return;out.push(r);}));
+  const C=Math.max(0,...out.map(r=>r.length));return out.map(r=>r.concat(Array.from({length:C-r.length},()=>({t:'',lc:0}))));
+}
+const curItem=()=>S.cur>=0?S.items[S.cur]:null;
+const curRows=()=>S.cur<0?mergedRows():(curItem()&&curItem().st==='ok'?curItem().rows:[]);
+function render(){
+  $('#res').hidden=!S.items.length;if(!S.items.length)return;
+  if(S.cur>=S.items.length)S.cur=0;
+  const done=S.items.filter(i=>i.st==='ok');if(done.length<2&&S.cur<0)S.cur=0;
+  $('#tabs').innerHTML=S.items.map((it,i)=>`<button class="tab ${i===S.cur?'on':''}" data-i="${i}" title="${esc(it.name)}">${esc(it.name)} ${ico[it.st]}</button>`).join('')+(done.length>1?`<button class="tab ${S.cur<0?'on':''}" data-i="-1">Tudo unido</button>`:'');
+  $('#bxa').hidden=done.length<2;
+  const it=curItem(),rows=curRows(),merged=S.cur<0,nc=Math.max(0,...rows.map(r=>r.length));
+  $('#left').hidden=merged||!it||!it.thumb;
+  $('#info').textContent=rows.length?`${rows.length} linhas × ${nc} colunas${it&&it.via?' · lido por '+it.via:''}`:'';
+  let h='';
+  if(!rows.length){h=`<p style="padding:16px;margin:0" class="${it&&it.st==='erro'?'err':''}">${it?(it.st==='erro'?'Erro: '+esc(it.err):it.st==='ok'?'Nenhum texto encontrado nesta página. Tente "Sempre OCR" nos ajustes.':'Aguardando leitura…'):'Sem dados.'}</p>`;}
+  else{
+    h='<table id="tbl"><thead><tr><th></th>';
+    for(let c=0;c<nc;c++)h+=`<th>${colL(c)}${merged?'':` <button data-a="mc" data-c="${c}" title="Unir com a coluna seguinte">⇥</button><button data-a="dc" data-c="${c}" title="Apagar coluna">✕</button>`}</th>`;
+    h+='</tr></thead><tbody>';
+    rows.forEach((r,i)=>{h+=`<tr><th>${i+1}${merged?'':` <button data-a="dr" data-r="${i}" title="Apagar linha">✕</button>`}</th>`;
+      for(let c=0;c<nc;c++){const x=r[c]||{t:'',lc:0};h+=`<td data-r="${i}" data-c="${c}" ${merged?'':'contenteditable="plaintext-only"'} class="${x.lc?'lc':''}">${esc(x.t)}</td>`;}h+='</tr>';});
+    h+='</tbody></table>';
+  }
+  $('#tw').innerHTML=h;drawOv();
+}
+function drawOv(){
+  const it=curItem(),cv=$('#ov');if(!it||!it.thumb)return;
+  const t=it.thumb;cv.width=t.width;cv.height=t.height;const x=cv.getContext('2d');x.drawImage(t,0,0);
+  if(it.st!=='ok')return;const r=t.width/it.W;x.lineWidth=2;x.strokeStyle='rgba(220,38,38,.85)';
+  for(const b of it.cols){x.beginPath();x.moveTo(b*r,0);x.lineTo(b*r,t.height);x.stroke();}
+  x.strokeStyle='rgba(37,99,235,.6)';x.lineWidth=1;x.setLineDash([6,4]);
+  for(const y of it.rowSep){x.beginPath();x.moveTo(0,y*r);x.lineTo(t.width,y*r);x.stroke();}
+  if($('#showw').checked){x.setLineDash([]);x.strokeStyle='rgba(16,185,129,.9)';for(const w of it.words)x.strokeRect(w.x0*r,w.y0*r,(w.x1-w.x0)*r,(w.y1-w.y0)*r);}
+}
+const rebuild=()=>{const o=opt();S.items.forEach(i=>{if(i.st==='ok')build(i,o);});render();};
+$('#tabs').onclick=e=>{const b=e.target.closest('.tab');if(b){S.cur=+b.dataset.i;render();}};
+$('#tw').onclick=e=>{
+  const b=e.target.closest('button');const it=curItem();if(!b||!it)return;const a=b.dataset.a,c=+b.dataset.c,r=+b.dataset.r;
+  if(a==='dc')it.rows.forEach(x=>x.splice(c,1));
+  if(a==='mc')it.rows.forEach(x=>{if(x[c+1]){x[c].t=(x[c].t+' '+x[c+1].t).trim();x[c].lc=x[c].lc||x[c+1].lc;x.splice(c+1,1);}});
+  if(a==='dr')it.rows.splice(r,1);
+  render();
+};
+$('#tw').oninput=e=>{const td=e.target.closest('td'),it=curItem();if(!td||!it)return;const x=it.rows[+td.dataset.r][+td.dataset.c];x.t=td.textContent;x.lc=0;td.classList.remove('lc');};
+const tsv=rows=>rows.map(r=>r.map(c=>/[\t\n"]/.test(c.t)?'"'+c.t.replace(/"/g,'""')+'"':c.t).join('\t')).join('\n');
+const htm=rows=>'<table>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c.t)+'</td>').join('')+'</tr>').join('')+'</table>';
+$('#bcopy').onclick=async()=>{
+  const rows=curRows();if(!rows.length)return toast('Nada para copiar');
+  try{await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([htm(rows)],{type:'text/html'}),'text/plain':new Blob([tsv(rows)],{type:'text/plain'})})]);}
+  catch(e){const d=document.createElement('div');d.style.cssText='position:fixed;left:-9999px;top:0';d.innerHTML=htm(rows);document.body.appendChild(d);
+    const rg=document.createRange();rg.selectNodeContents(d);const s=getSelection();s.removeAllRanges();s.addRange(rg);document.execCommand('copy');s.removeAllRanges();d.remove();}
+  toast('Tabela copiada. Cole no Excel, Sheets ou Word.');
+};
+function xlsx(sheets,name){
+  if(!sheets.length||!sheets[0][1].length)return toast('Nada para exportar');
+  const wb=XLSX.utils.book_new(),used=new Set(),o=opt();
+  sheets.forEach(([n,rows])=>{const nm=(n.replace(/[\[\]:*?\/\\]/g,' ').trim().slice(0,28))||'Planilha';let k=nm,i=2;while(used.has(k.toLowerCase()))k=nm.slice(0,26)+' '+i++;used.add(k.toLowerCase());XLSX.utils.book_append_sheet(wb,sheetOf(rows,o),k);});
+  XLSX.writeFile(wb,name);
+}
+$('#bx').onclick=()=>{const it=curItem();xlsx([[it?it.name:'Tudo unido',curRows()]],(it?it.name.replace(/\.[^.]+$/,''):'tabelas')+'.xlsx');};
+$('#bxa').onclick=()=>xlsx(S.items.filter(i=>i.st==='ok').map(i=>[i.name,i.rows]),'tabelas.xlsx');
+$('#bcsv').onclick=()=>{const rows=curRows();if(!rows.length)return toast('Nada para exportar');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.map(r=>r.map(c=>'"'+c.t.replace(/"/g,'""')+'"').join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}));a.download='tabela.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),3000);};
+$('#ov').onclick=e=>{const it=curItem();if(!it||it.st!=='ok')return;
+  const rc=e.currentTarget.getBoundingClientRect(),x=(e.clientX-rc.left)/rc.width*it.W,y=(e.clientY-rc.top)/rc.height*it.H;
+  if($('#clk').value==='c'){const b=(it.mc||it.cols).slice(),tol=it.W*.012,i=b.findIndex(v=>Math.abs(v-x)<tol);if(i>=0)b.splice(i,1);else b.push(x);it.mc=b.sort((a,c)=>a-c);}
+  else{const tol=it.H*.012,s=it.rowSep.find(v=>Math.abs(v-y)<tol),yy=s!==undefined?s:y;
+    it.my=(it.my||[]).filter(v=>Math.abs(v.y-yy)>tol/2);it.my.push({y:yy,t:s!==undefined?'j':'s'});}
+  build(it,opt());render();};
+$('#auto').onclick=()=>{const it=curItem();if(it&&it.st==='ok'){it.mc=null;it.my=null;build(it,opt());render();toast('Detecção automática restaurada');}};
+$('#bdel').onclick=()=>{const it=curItem();if(!it)return toast('Escolha uma aba para excluir');
+  if(it.st==='lendo'&&S.worker){S.worker.terminate();S.worker=null;}
+  S.items.splice(S.cur,1);S.cur=Math.min(S.cur,S.items.length-1);if(!S.items.length)msg('');render();toast('Aba excluída');};
+let nt;$('#bnew').onclick=function(){
+  if(!this.dataset.ok){this.dataset.ok=1;this.textContent='Clique de novo para apagar tudo';nt=setTimeout(()=>{delete this.dataset.ok;this.textContent='Nova tabela';},3000);return;}
+  clearTimeout(nt);delete this.dataset.ok;this.textContent='Nova tabela';
+  S.stop=true;if(S.busy&&S.worker){S.worker.terminate();S.worker=null;}
+  S.items.length=0;S.cur=0;msg('');render();toast('Tudo limpo. Pode começar outra tabela.');};
+$('#redo').onclick=()=>{S.items.forEach(i=>{i.st='fila';});render();run();};
+['grid','wrap','conv','nfmt'].forEach(i=>$('#'+i).onchange=rebuild);
+$('#showw').onchange=drawOv;
+$('#sens').oninput=e=>{const v=+e.target.value;$('#sv').textContent=v===1?'normal':v>1?'mais colunas':'menos colunas';rebuild();};
+const dz=$('#drop'),fi=$('#file');
+dz.onclick=()=>fi.click();dz.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}};
+fi.onchange=()=>{addFiles([...fi.files]);fi.value='';};
+['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('on');}));
+['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('on');}));
+dz.addEventListener('drop',e=>addFiles([...e.dataTransfer.files]));
+['dragover','drop'].forEach(n=>addEventListener(n,e=>e.preventDefault()));
+addEventListener('paste',e=>{const f=[...(e.clipboardData?e.clipboardData.files:[])];if(!f.length)return;e.preventDefault();
+  addFiles(f.map((x,i)=>new File([x],x.name&&x.name!=='image.png'?x.name:'Print colado '+(S.items.length+i+1)+'.png',{type:x.type})));});
+if(typeof pdfjsLib==='undefined'||typeof Tesseract==='undefined'||typeof XLSX==='undefined')
+  $('#libs').innerHTML='<div class="err">Não consegui carregar as bibliotecas de leitura (PDF, OCR e Excel). Conecte-se à internet e recarregue a página. Só a primeira vez precisa de internet.</div>';
+</script>
+</body>
+</html>
